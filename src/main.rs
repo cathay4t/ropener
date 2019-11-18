@@ -16,7 +16,119 @@
 //
 // Author: Gris Ge <cnfourt@gmail.com>
 
+extern crate toml;
+extern crate url;
+
+use std::env::args;
+use std::fs::File;
+use std::io::Read;
+use std::process::Command;
+use std::str;
+use toml::Value;
+use url::form_urlencoded;
+
+static FILE_SPLITER: &str = ": ";
+static CFG_GLOBAL: &str = "global";
+static DEFAULT_FILE_TYPE: &str = "default";
+
+fn get_cfg() -> Value {
+    let mut fd = File::open("/home/fge/.ropener.conf")
+        .expect("Failed to open config file");
+    let mut contents = String::new();
+    fd.read_to_string(&mut contents)
+        .expect("Failed to read config file");
+    contents
+        .parse::<Value>()
+        .expect("Failed to parse config file")
+}
+
+fn get_file_type(file_path: &str) -> (String, String) {
+    let result = Command::new("file")
+        .arg("-E")
+        .arg("--mime-type")
+        .arg(file_path)
+        .output()
+        .expect("failed to execute file command");
+    if !result.status.success() {
+        panic!(
+            "Failed to read mime type of {}: error {}: {}",
+            file_path,
+            result.status.code().unwrap(),
+            str::from_utf8(&result.stdout).unwrap()
+        )
+    }
+    let output: String = String::from_utf8(result.stdout)
+        .expect("Failed to convert file command output to String");
+    let index = output
+        .find(FILE_SPLITER)
+        .expect("Failed to find ': ' in file output");
+    let file_type = &output[index + FILE_SPLITER.len()..];
+    let file_types: Vec<&str> = file_type.split('/').collect();
+    (
+        file_types[0].trim().to_string(),
+        file_types[1].trim().to_string(),
+    )
+}
+
+fn get_cmd(cfg: &Value, main_file_type: &str, sub_file_type: &str) -> String {
+    let cfg = cfg.as_table().unwrap();
+    let global_cfg = match cfg.get(CFG_GLOBAL) {
+        Some(c) => c.as_table().unwrap(),
+        None => panic!("No global config"),
+    };
+    let global_default_cmd = match global_cfg.get(DEFAULT_FILE_TYPE) {
+        Some(c) => c.as_str().unwrap().to_string(),
+        None => panic!("No default config in global"),
+    };
+
+    let cmd = match cfg.get(main_file_type) {
+        Some(sub_cfg) => match sub_cfg.get(sub_file_type) {
+            Some(c) => c.as_str().unwrap().to_string(),
+            None => match sub_cfg.get(DEFAULT_FILE_TYPE) {
+                Some(c) => c.as_str().unwrap().to_string(),
+                None => global_default_cmd,
+            },
+        },
+        None => global_default_cmd,
+    };
+    match global_cfg.get(&cmd) {
+        Some(c) => c.as_str().unwrap().to_string(),
+        None => cmd,
+    }
+}
+
+fn decode_file_uri(file_uri: &str) -> String {
+    form_urlencoded::parse(file_uri["file://".len()..].as_bytes())
+        .map(|(key, val)| [key, val].concat())
+        .collect()
+}
 
 fn main() {
-    println!("Hello, world!");
+    let argv: Vec<String> = args().collect();
+
+    if argv.len() < 2 {
+        panic!("Need file path");
+    }
+
+    let file_path = if argv[1].starts_with("file://") {
+        decode_file_uri(&argv[1])
+    } else {
+        argv[1].clone()
+    };
+    println!("{}", &file_path);
+
+    let (main_file_type, sub_file_type) = get_file_type(&file_path);
+    let cmd = get_cmd(&get_cfg(), &main_file_type, &sub_file_type);
+    println!(
+        "{}\n{}/{}\n{}",
+        file_path, main_file_type, sub_file_type, cmd
+    );
+
+    Command::new("bash")
+        .arg("-c")
+        .arg(&format!("{} '{}'", cmd, file_path))
+        .spawn()
+        .expect(&format!("failed to execute {}", cmd))
+        .wait()
+        .expect(&format!("failed to execute {}", cmd));
 }
