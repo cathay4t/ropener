@@ -16,12 +16,14 @@
 //
 // Author: Gris Ge <cnfourt@gmail.com>
 
-extern crate toml;
-extern crate url;
+//extern crate toml;
+//extern crate url;
 
 use std::env::args;
+use std::fs;
 use std::fs::File;
 use std::io::Read;
+use std::path::PathBuf;
 use std::process::Command;
 use std::str;
 use toml::Value;
@@ -40,6 +42,33 @@ fn get_cfg() -> Value {
     contents
         .parse::<Value>()
         .expect("Failed to parse config file")
+}
+
+fn is_soft_link(file_path: &str) -> bool {
+    if let Ok(metadata) = fs::symlink_metadata(file_path) {
+        metadata.file_type().is_symlink()
+    } else {
+        false
+    }
+}
+
+fn get_soft_link_source(file_path: &str) -> String {
+    if let Ok(source) = fs::read_link(file_path) {
+        if source.is_absolute() {
+            source.to_str().unwrap().into()
+        } else {
+            let mut file_dir = std::path::PathBuf::from(file_path);
+            file_dir.pop();
+            let ab_source = std::path::PathBuf::from(format!(
+                "{}/{}",
+                file_dir.to_str().unwrap(),
+                source.to_str().unwrap(),
+            ));
+            ab_source.to_str().unwrap().into()
+        }
+    } else {
+        file_path.into()
+    }
 }
 
 fn get_file_type(file_path: &str) -> (String, String) {
@@ -110,11 +139,15 @@ fn main() {
         panic!("Need file path");
     }
 
-    let file_path = if argv[1].starts_with("file://") {
+    let mut file_path = if argv[1].starts_with("file://") {
         decode_file_uri(&argv[1])
     } else {
         argv[1].clone()
     };
+
+    if is_soft_link(&file_path) {
+        file_path = get_soft_link_source(&file_path);
+    }
     println!("{}", &file_path);
 
     let (main_file_type, sub_file_type) = get_file_type(&file_path);
