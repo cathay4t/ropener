@@ -16,14 +16,10 @@
 //
 // Author: Gris Ge <cnfourt@gmail.com>
 
-//extern crate toml;
-//extern crate url;
-
 use std::env::args;
 use std::fs;
 use std::fs::File;
 use std::io::Read;
-use std::path::PathBuf;
 use std::process::Command;
 use std::str;
 use toml::Value;
@@ -161,7 +157,7 @@ fn main() {
         .arg("-c")
         .arg(&format!("{} '{}'", cmd, file_path))
         .spawn()
-        .expect(&format!("failed to execute {}", cmd))
+        .unwrap_or_else(|_| panic!("failed to execute {}", cmd))
         .wait()
-        .expect(&format!("failed to execute {}", cmd));
+        .unwrap_or_else(|_| panic!("failed to execute {}", cmd));
 }
