@@ -153,11 +153,10 @@ fn main() {
         file_path, main_file_type, sub_file_type, cmd
     );
 
-    Command::new("bash")
-        .arg("-c")
-        .arg(&format!("{} '{}'", cmd, file_path))
+    Command::new(&cmd)
+        .arg(file_path)
         .spawn()
-        .unwrap_or_else(|_| panic!("failed to execute {}", cmd))
+        .unwrap_or_else(|_| panic!("failed to execute {}", &cmd))
         .wait()
-        .unwrap_or_else(|_| panic!("failed to execute {}", cmd));
+        .unwrap_or_else(|_| panic!("failed to execute {}", &cmd));
 }
