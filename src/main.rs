@@ -144,7 +144,12 @@ fn main() {
     if is_soft_link(&file_path) {
         file_path = get_soft_link_source(&file_path);
     }
-    println!("{}", &file_path);
+
+    if ! std::path::Path::new(&file_path).exists() {
+        eprintln!("File {} does not exists", &file_path);
+        std::process::exit(1);
+    }
+
 
     let (main_file_type, sub_file_type) = get_file_type(&file_path);
     let cmd = get_cmd(&get_cfg(), &main_file_type, &sub_file_type);
