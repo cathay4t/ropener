@@ -30,7 +30,8 @@ static CFG_GLOBAL: &str = "global";
 static DEFAULT_FILE_TYPE: &str = "default";
 
 fn get_cfg() -> Value {
-    let mut fd = File::open("/home/fge/.ropener.conf")
+    let home_path = std::env::var("HOME").expect("Failed to find HOME path");
+    let mut fd = File::open(&format!("{}/.config/ropener.conf", home_path))
         .expect("Failed to open config file");
     let mut contents = String::new();
     fd.read_to_string(&mut contents)
@@ -82,8 +83,8 @@ fn get_file_type(file_path: &str) -> (String, String) {
             str::from_utf8(&result.stdout).unwrap()
         )
     }
-    let output: String = String::from_utf8(result.stdout)
-        .expect("Failed to convert file command output to String");
+    let output: String =
+        String::from_utf8(result.stdout).expect("Failed to convert file command output to String");
     let index = output
         .find(FILE_SPLITER)
         .expect("Failed to find ': ' in file output");
@@ -145,11 +146,10 @@ fn main() {
         file_path = get_soft_link_source(&file_path);
     }
 
-    if ! std::path::Path::new(&file_path).exists() {
+    if !std::path::Path::new(&file_path).exists() {
         eprintln!("File {} does not exists", &file_path);
         std::process::exit(1);
     }
-
 
     let (main_file_type, sub_file_type) = get_file_type(&file_path);
     let cmd = get_cmd(&get_cfg(), &main_file_type, &sub_file_type);
@@ -165,4 +165,5 @@ fn main() {
         .unwrap_or_else(|_| panic!("failed to execute {}", cmd))
         .wait()
         .unwrap_or_else(|_| panic!("failed to execute {}", cmd));
+    println!("");
 }
