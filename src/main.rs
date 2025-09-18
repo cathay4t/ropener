@@ -1,43 +1,23 @@
-//
-// Copyright (C) 2019 Gris Ge
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <http://www.gnu.org/licenses/>.
-//
-// Author: Gris Ge <cnfourt@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
 
-use std::env::args;
-use std::fs;
-use std::fs::File;
-use std::io::Read;
-use std::process::Command;
-use std::str;
-use toml::Value;
+use std::{env::args, fs, fs::File, io::Read, process::Command, str};
+
+use toml::Table;
 use url::form_urlencoded;
 
 static FILE_SPLITER: &str = ": ";
 static CFG_GLOBAL: &str = "global";
 static DEFAULT_FILE_TYPE: &str = "default";
 
-fn get_cfg() -> Value {
+fn get_cfg() -> Table {
     let home_path = std::env::var("HOME").expect("Failed to find HOME path");
-    let mut fd = File::open(&format!("{}/.config/ropener.conf", home_path))
+    let mut fd = File::open(format!("{}/.config/ropener.conf", home_path))
         .expect("Failed to open config file");
     let mut contents = String::new();
     fd.read_to_string(&mut contents)
         .expect("Failed to read config file");
     contents
-        .parse::<Value>()
+        .parse::<Table>()
         .expect("Failed to parse config file")
 }
 
@@ -83,8 +63,8 @@ fn get_file_type(file_path: &str) -> (String, String) {
             str::from_utf8(&result.stdout).unwrap()
         )
     }
-    let output: String =
-        String::from_utf8(result.stdout).expect("Failed to convert file command output to String");
+    let output: String = String::from_utf8(result.stdout)
+        .expect("Failed to convert file command output to String");
     let index = output
         .find(FILE_SPLITER)
         .expect("Failed to find ': ' in file output");
@@ -96,8 +76,7 @@ fn get_file_type(file_path: &str) -> (String, String) {
     )
 }
 
-fn get_cmd(cfg: &Value, main_file_type: &str, sub_file_type: &str) -> String {
-    let cfg = cfg.as_table().unwrap();
+fn get_cmd(cfg: &Table, main_file_type: &str, sub_file_type: &str) -> String {
     let global_cfg = match cfg.get(CFG_GLOBAL) {
         Some(c) => c.as_table().unwrap(),
         None => panic!("No global config"),
@@ -124,7 +103,7 @@ fn get_cmd(cfg: &Value, main_file_type: &str, sub_file_type: &str) -> String {
 }
 
 fn decode_file_uri(file_uri: &str) -> String {
-    form_urlencoded::parse(file_uri["file://".len()..].as_bytes())
+    form_urlencoded::parse(&file_uri.as_bytes()["file://".len()..])
         .map(|(key, val)| [key, val].concat())
         .collect()
 }
@@ -157,13 +136,17 @@ fn main() {
         "{}\n{}/{}\n{}",
         file_path, main_file_type, sub_file_type, cmd
     );
+    let cmds: Vec<&str> = cmd.split(" ").collect();
 
-    Command::new("bash")
-        .arg("-c")
-        .arg(&format!("{} '{}'", cmd, file_path))
+    let cmd = cmds[0];
+    let mut args: Vec<&str> = cmds[1..].to_vec();
+    args.push(file_path.as_str());
+
+    Command::new(cmd)
+        .args(&args)
         .spawn()
         .unwrap_or_else(|_| panic!("failed to execute {}", cmd))
         .wait()
         .unwrap_or_else(|_| panic!("failed to execute {}", cmd));
-    println!("");
+    println!();
 }
