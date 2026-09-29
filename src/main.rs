@@ -6,6 +6,7 @@ use toml::Table;
 use url::form_urlencoded;
 
 static FILE_SPLITER: &str = ": ";
+static GIO_CONTENT_TYPE: &str = "standard::content-type: ";
 static CFG_GLOBAL: &str = "global";
 static DEFAULT_FILE_TYPE: &str = "default";
 
@@ -48,7 +49,32 @@ fn get_soft_link_source(file_path: &str) -> String {
     }
 }
 
-fn get_file_type(file_path: &str) -> (String, String) {
+fn split_file_type(file_type: &str) -> (String, String) {
+    let file_types: Vec<&str> = file_type.split('/').collect();
+    (
+        file_types[0].trim().to_string(),
+        file_types[1].trim().to_string(),
+    )
+}
+
+fn get_gio_file_type(file_path: &str) -> Option<(String, String)> {
+    let result = Command::new("gio")
+        .arg("info")
+        .arg("-a")
+        .arg("standard::content-type")
+        .arg(file_path)
+        .output()
+        .ok()?;
+    if !result.status.success() {
+        return None;
+    }
+    let output = str::from_utf8(&result.stdout).ok()?;
+    let index = output.find(GIO_CONTENT_TYPE)?;
+    let file_type = output[index + GIO_CONTENT_TYPE.len()..].lines().next()?;
+    Some(split_file_type(file_type))
+}
+
+fn get_file_file_type(file_path: &str) -> (String, String) {
     let result = Command::new("file")
         .arg("-E")
         .arg("--mime-type")
@@ -68,12 +94,12 @@ fn get_file_type(file_path: &str) -> (String, String) {
     let index = output
         .find(FILE_SPLITER)
         .expect("Failed to find ': ' in file output");
-    let file_type = &output[index + FILE_SPLITER.len()..];
-    let file_types: Vec<&str> = file_type.split('/').collect();
-    (
-        file_types[0].trim().to_string(),
-        file_types[1].trim().to_string(),
-    )
+    split_file_type(&output[index + FILE_SPLITER.len()..])
+}
+
+fn get_file_type(file_path: &str) -> (String, String) {
+    get_gio_file_type(file_path)
+        .unwrap_or_else(|| get_file_file_type(file_path))
 }
 
 fn get_cmd(cfg: &Table, main_file_type: &str, sub_file_type: &str) -> String {
